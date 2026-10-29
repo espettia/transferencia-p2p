@@ -42,6 +42,7 @@ export function App() {
   const [cameraError, setCameraError] = useState('');
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionDetail, setConnectionDetail] = useState('');
+  const [peerFingerprint, setPeerFingerprint] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
@@ -56,7 +57,7 @@ export function App() {
     const peer = new PeerConnection(roomId, !inviteId, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
-    });
+    }, setPeerFingerprint);
     peerRef.current = peer;
     void peer.connect();
     return () => {
@@ -209,9 +210,11 @@ export function App() {
           {connectionState === 'idle' && 'Listo para conectar'}
           {connectionState === 'connecting' && 'Conectando con el tracker…'}
           {connectionState === 'waiting' && 'Esperando al otro dispositivo…'}
-          {connectionState === 'connected' && 'Dispositivos conectados directamente'}
+          {connectionState === 'authenticating' && (connectionDetail || 'Verificando la identidad del otro dispositivo…')}
+          {connectionState === 'connected' && (connectionDetail || 'Dispositivos autenticados y conectados directamente')}
           {connectionState === 'error' && (connectionDetail || 'No se pudo establecer la conexión')}
         </span>
+        {peerFingerprint && <small className="peer-fingerprint">Huella: {peerFingerprint}</small>}
       </section>
       <footer className="privacy-note">
         <span aria-hidden="true">◈</span>

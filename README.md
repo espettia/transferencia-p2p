@@ -20,12 +20,16 @@ Se implementará una etapa a la vez:
 1. **Preparar base del proyecto y UI** — Completada.
 2. **Implementar invitaciones, QR y cámara** — Completada; depende de la etapa 1.
 3. **Integrar tracker y conexión WebRTC** — Completada; depende de la etapa 2.
-4. **Implementar autenticación de pares** — Pendiente; depende de la etapa 3.
+4. **Implementar autenticación de pares** — Completada; depende de la etapa 3.
 5. **Implementar IndexedDB y catálogo** — Pendiente; depende de la etapa 4.
 6. **Implementar transferencias por bloques** — Pendiente; depende de la etapa 5.
 7. **Validar, desplegar y documentar** — Pendiente; depende de la etapa 6.
 
-La siguiente etapa es **Implementar autenticación de pares**.
+La siguiente etapa es **Implementar IndexedDB y catálogo**.
+
+La autenticación de pares se realiza después de abrir WebRTC: ambos dispositivos generan
+una identidad ECDSA P-256 temporal, intercambian sus claves públicas y firman un desafío
+común ligado a la invitación. La interfaz muestra la huella corta de la clave remota.
 
 ## Tracker WebSocket
 

@@ -72,6 +72,9 @@
 .connection-connected .connection-dot { background: #31a874; box-shadow: 0 0 0 4px rgb(49 168 116 / 14%); }
 .connection-error { color: #c85340; }
 .connection-error .connection-dot { background: #ef6a50; }
+.peer-fingerprint {
+  color: #70808e; font: 10px 'DM Mono', monospace; letter-spacing: .08em;
+}
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }

@@ -1,4 +1,4 @@
-export type ConnectionState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
+export type ConnectionState = 'idle' | 'connecting' | 'waiting' | 'authenticating' | 'connected' | 'error';
 
 type SignalMessage =
   | { type: 'ready'; roomId: string }
@@ -10,6 +10,14 @@ type SignalMessage =
 
 type SignalPayload = Exclude<SignalMessage, { type: 'ready' }>;
 type TrackerMessage = SignalPayload | { type: 'create' | 'join'; roomId: string };
+type AuthMessage =
+  | { type: 'auth-hello'; publicKey: JsonWebKey; nonce: string }
+  | { type: 'auth-proof'; signature: string };
+
+type PeerIdentity = {
+  publicKey: JsonWebKey;
+  nonce: string;
+};
 
 const trackerUrl = (): string => {
   const configured = (import.meta as ImportMeta & {
@@ -25,15 +33,21 @@ export class PeerConnection {
   private connection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  private identity: CryptoKeyPair | null = null;
+  private localIdentity: PeerIdentity | null = null;
+  private remoteIdentity: PeerIdentity | null = null;
+  private remoteSignature: string | null = null;
+  private localSignature: string | null = null;
 
   constructor(
     private readonly roomId: string,
     private readonly isHost: boolean,
     private readonly onStateChange: (state: ConnectionState, detail?: string) => void,
+    private readonly onPeerIdentity?: (fingerprint: string) => void,
   ) {}
 
   async connect(): Promise<void> {
-    if (!window.RTCPeerConnection || !window.WebSocket) {
+    if (!window.RTCPeerConnection || !window.WebSocket || !window.crypto?.subtle) {
       this.onStateChange('error', 'Este navegador no admite conexiones P2P.');
       return;
     }
@@ -47,7 +61,6 @@ export class PeerConnection {
     };
     this.connection.onconnectionstatechange = () => {
       const state = this.connection?.connectionState;
-      if (state === 'connected') this.onStateChange('connected');
       if (state === 'failed' || state === 'disconnected' || state === 'closed') {
         this.onStateChange('error', 'La conexión entre dispositivos se cerró.');
       }
@@ -87,6 +100,11 @@ export class PeerConnection {
     this.dataChannel = null;
     this.connection = null;
     this.socket = null;
+    this.identity = null;
+    this.localIdentity = null;
+    this.remoteIdentity = null;
+    this.remoteSignature = null;
+    this.localSignature = null;
   }
 
   private send(message: TrackerMessage): void {
@@ -143,6 +161,114 @@ export class PeerConnection {
 
   private attachDataChannel(channel: RTCDataChannel): void {
     this.dataChannel = channel;
-    channel.onopen = () => this.onStateChange('connected');
+    channel.onopen = () => {
+      this.onStateChange('authenticating', 'Verificando la identidad del otro dispositivo…');
+      void this.startAuthentication(channel).catch(() => {
+        this.onStateChange('error', 'No se pudo verificar la identidad del dispositivo.');
+        this.close();
+      });
+    };
+    channel.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data as string) as AuthMessage;
+        void this.handleAuthentication(message);
+      } catch {
+        this.onStateChange('error', 'El dispositivo envió un mensaje no válido.');
+        this.close();
+      }
+    };
+    channel.onerror = () => {
+      this.onStateChange('error', 'Falló el canal seguro entre dispositivos.');
+    };
   }
+
+  private async startAuthentication(channel: RTCDataChannel): Promise<void> {
+    this.identity = await crypto.subtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign', 'verify'],
+    );
+    const publicKey = await crypto.subtle.exportKey('jwk', this.identity.publicKey);
+    this.localIdentity = { publicKey, nonce: randomNonce() };
+    channel.send(JSON.stringify({ type: 'auth-hello', ...this.localIdentity } satisfies AuthMessage));
+  }
+
+  private async handleAuthentication(message: AuthMessage): Promise<void> {
+    if (message.type === 'auth-hello') {
+      this.remoteIdentity = { publicKey: message.publicKey, nonce: message.nonce };
+      await this.sendProofIfReady();
+      return;
+    }
+    if (message.type === 'auth-proof') {
+      this.remoteSignature = message.signature;
+      await this.finishAuthenticationIfReady();
+    }
+  }
+
+  private async sendProofIfReady(): Promise<void> {
+    if (!this.dataChannel || !this.identity || !this.localIdentity || !this.remoteIdentity || this.localSignature) return;
+    const transcript = await this.authenticationTranscript();
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      this.identity.privateKey,
+      transcript,
+    );
+    this.localSignature = encodeBytes(new Uint8Array(signature));
+    this.dataChannel.send(JSON.stringify({ type: 'auth-proof', signature: this.localSignature } satisfies AuthMessage));
+    await this.finishAuthenticationIfReady();
+  }
+
+  private async finishAuthenticationIfReady(): Promise<void> {
+    if (!this.remoteIdentity || !this.remoteSignature || !this.localIdentity || !this.identity) return;
+    const transcript = await this.authenticationTranscript();
+    const remoteKey = await crypto.subtle.importKey(
+      'jwk',
+      this.remoteIdentity.publicKey,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify'],
+    );
+    const valid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      remoteKey,
+      decodeBytes(this.remoteSignature),
+      transcript,
+    );
+    if (!valid) {
+      this.onStateChange('error', 'La identidad del otro dispositivo no pudo verificarse.');
+      this.close();
+      return;
+    }
+    this.onPeerIdentity?.(await fingerprint(this.remoteIdentity.publicKey));
+    this.onStateChange('connected', 'Dispositivos autenticados y conectados directamente');
+  }
+
+  private async authenticationTranscript(): Promise<ArrayBuffer> {
+    if (!this.localIdentity || !this.remoteIdentity) throw new Error('Faltan datos de autenticación.');
+    const identities = [this.localIdentity, this.remoteIdentity].sort((a, b) =>
+      JSON.stringify(a.publicKey).localeCompare(JSON.stringify(b.publicKey)),
+    );
+    return new TextEncoder().encode(`${this.roomId}:${JSON.stringify(identities)}`).buffer;
+  }
+}
+
+function randomNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return encodeBytes(bytes);
+}
+
+function encodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function decodeBytes(value: string): ArrayBuffer {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
+}
+
+async function fingerprint(publicKey: JsonWebKey): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(publicKey)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12).toUpperCase();
 }
