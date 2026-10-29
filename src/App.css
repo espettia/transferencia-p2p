@@ -60,6 +60,18 @@
 .privacy-note p { margin: 0; }
 .notice { min-height: 18px; margin: 18px 0 -18px; color: #ef6a50; font-size: 12px; text-align: center; opacity: 0; }
 .notice-visible { opacity: 1; }
+.connection-status {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 20px;
+  margin: 22px 0 -12px; color: #70808e; font-size: 12px; text-align: center;
+}
+.connection-dot { width: 7px; height: 7px; border-radius: 50%; background: #aab5bf; }
+.connection-connecting .connection-dot, .connection-waiting .connection-dot {
+  background: #e5a545; box-shadow: 0 0 0 4px rgb(229 165 69 / 14%);
+}
+.connection-connected { color: #23845b; }
+.connection-connected .connection-dot { background: #31a874; box-shadow: 0 0 0 4px rgb(49 168 116 / 14%); }
+.connection-error { color: #c85340; }
+.connection-error .connection-dot { background: #ef6a50; }
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }

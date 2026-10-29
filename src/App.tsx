@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
+import { ConnectionState, PeerConnection } from './peerConnection';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 
@@ -31,6 +32,7 @@ function QrCode({ value }: { value: string }) {
 }
 
 export function App() {
+  const inviteId = new URLSearchParams(window.location.search).get('invite');
   const [invitation, setInvitation] = useState(() => {
     const saved = window.sessionStorage.getItem(INVITATION_KEY);
     return saved ?? createInvitation();
@@ -38,12 +40,30 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
+  const [connectionDetail, setConnectionDetail] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
+  const peerRef = useRef<PeerConnection | null>(null);
 
   useEffect(() => {
     window.sessionStorage.setItem(INVITATION_KEY, invitation);
   }, [invitation]);
+
+  useEffect(() => {
+    const roomId = inviteId ?? new URL(invitation).searchParams.get('invite');
+    if (!roomId) return;
+    const peer = new PeerConnection(roomId, !inviteId, (state, detail) => {
+      setConnectionState(state);
+      setConnectionDetail(detail ?? '');
+    });
+    peerRef.current = peer;
+    void peer.connect();
+    return () => {
+      peer.close();
+      peerRef.current = null;
+    };
+  }, [inviteId, invitation]);
 
   useEffect(() => {
     if (!cameraOpen || !videoRef.current) return;
@@ -183,6 +203,16 @@ export function App() {
       </section>
 
       <p className={`notice${notice ? ' notice-visible' : ''}`} role="status">{notice}</p>
+      <section className={`connection-status connection-${connectionState}`} aria-live="polite">
+        <span className="connection-dot" aria-hidden="true" />
+        <span>
+          {connectionState === 'idle' && 'Listo para conectar'}
+          {connectionState === 'connecting' && 'Conectando con el tracker…'}
+          {connectionState === 'waiting' && 'Esperando al otro dispositivo…'}
+          {connectionState === 'connected' && 'Dispositivos conectados directamente'}
+          {connectionState === 'error' && (connectionDetail || 'No se pudo establecer la conexión')}
+        </span>
+      </section>
       <footer className="privacy-note">
         <span aria-hidden="true">◈</span>
         <p>Los archivos viajan directamente entre tus dispositivos.<br />No se almacenan en ningún servidor.</p>
