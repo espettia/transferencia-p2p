@@ -6,6 +6,7 @@ export type CatalogEntry = {
   lastModified: number;
   owner: 'local' | 'remote';
   available: boolean;
+  sharedWith?: string;
 };
 
 type StoredEntry = CatalogEntry & { blob?: Blob };

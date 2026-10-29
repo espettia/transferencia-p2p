@@ -47,6 +47,7 @@ export class PeerConnection {
     private readonly isHost: boolean,
     private readonly onStateChange: (state: ConnectionState, detail?: string) => void,
     private readonly onPeerIdentity?: (fingerprint: string) => void,
+    private readonly onLocalIdentity?: (fingerprint: string) => void,
     private readonly onCatalogEntry?: (entry: CatalogEntry) => void,
   ) {}
 
@@ -208,6 +209,7 @@ export class PeerConnection {
     );
     const publicKey = await crypto.subtle.exportKey('jwk', this.identity.publicKey);
     this.localIdentity = { publicKey, nonce: randomNonce() };
+    this.onLocalIdentity?.(await fingerprint(publicKey));
     channel.send(JSON.stringify({ type: 'auth-hello', ...this.localIdentity } satisfies AuthMessage));
   }
 
@@ -286,7 +288,7 @@ function decodeBytes(value: string): ArrayBuffer {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
 }
 
-async function fingerprint(publicKey: JsonWebKey): Promise<string> {
+export async function fingerprint(publicKey: JsonWebKey): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(publicKey)));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12).toUpperCase();
 }

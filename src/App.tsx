@@ -2,7 +2,7 @@ import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
-import { ConnectionState, PeerConnection } from './peerConnection';
+import { ConnectionState, fingerprint, PeerConnection } from './peerConnection';
 import { CatalogEntry, listCatalog, saveLocalFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
@@ -44,6 +44,8 @@ export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionDetail, setConnectionDetail] = useState('');
   const [peerFingerprint, setPeerFingerprint] = useState('');
+  const [localFingerprint, setLocalFingerprint] = useState('');
+  const [qrFingerprint, setQrFingerprint] = useState('');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,12 +61,18 @@ export function App() {
   }, [invitation]);
 
   useEffect(() => {
+    const value = inviteId ?? new URL(invitation).searchParams.get('invite');
+    if (!value) return;
+    void fingerprintFromText(value).then(setQrFingerprint);
+  }, [inviteId, invitation]);
+
+  useEffect(() => {
     const roomId = inviteId ?? new URL(invitation).searchParams.get('invite');
     if (!roomId) return;
     const peer = new PeerConnection(roomId, !inviteId, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
-    }, setPeerFingerprint, (entry) => {
+    }, setPeerFingerprint, setLocalFingerprint, (entry) => {
       void saveRemoteEntry(entry).then(async () => setCatalog(await listCatalog()))
         .catch(() => setCatalogError('No se pudo actualizar el catálogo remoto.'));
     });
@@ -80,7 +88,7 @@ export function App() {
     if (connectionState !== 'connected' || !peerRef.current) return;
     for (const entry of catalog.filter((item) => item.owner === 'local')) {
       try {
-        peerRef.current.sendCatalogEntry(entry);
+        peerRef.current.sendCatalogEntry({ ...entry, sharedWith: peerFingerprint });
       } catch {
         setCatalogError('No se pudo sincronizar el catálogo.');
         break;
@@ -157,7 +165,7 @@ export function App() {
         window.setTimeout(() => setNotice(''), 3000);
         return;
       }
-      peerRef.current.sendCatalogEntry(entry);
+      peerRef.current.sendCatalogEntry({ ...entry, sharedWith: peerFingerprint });
       setNotice('Archivo añadido al catálogo de ambos dispositivos.');
       window.setTimeout(() => setNotice(''), 3000);
     } catch (error) {
@@ -246,6 +254,17 @@ export function App() {
       </section>
 
       <p className={`notice${notice ? ' notice-visible' : ''}`} role="status">{notice}</p>
+      <section className="fingerprint-panel" aria-labelledby="fingerprint-title">
+        <div className="fingerprint-heading">
+          <p className="eyebrow">Identidad de conexión</p>
+          <h2 id="fingerprint-title">Huellas</h2>
+        </div>
+        <div className="fingerprint-grid">
+          <Fingerprint label="QR leído" value={qrFingerprint} />
+          <Fingerprint label="Este dispositivo" value={localFingerprint} />
+          <Fingerprint label="Dispositivo conectado" value={peerFingerprint} />
+        </div>
+      </section>
       <section className={`connection-status connection-${connectionState}`} aria-live="polite">
         <span className="connection-dot" aria-hidden="true" />
         <span>
@@ -288,6 +307,7 @@ export function App() {
                 </span>
                 <span className={`file-state${entry.available ? ' file-state-ready' : ''}`}>
                   {entry.available ? 'Disponible' : 'Pendiente'}
+                  {entry.sharedWith && <small> · {entry.sharedWith}</small>}
                 </span>
               </li>
             ))}
@@ -306,4 +326,18 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Fingerprint({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="fingerprint-field">
+      <span>{label}</span>
+      <input type="text" value={value || 'Pendiente de autenticación'} readOnly />
+    </label>
+  );
+}
+
+async function fingerprintFromText(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12).toUpperCase();
 }
