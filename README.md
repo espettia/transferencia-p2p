@@ -35,9 +35,9 @@ IndexedDB conserva el catálogo local y los archivos seleccionados. Tras autenti
 cada nuevo archivo comparte sus metadatos por WebRTC y aparece automáticamente en el
 catálogo remoto; la transferencia del contenido binario se implementará en la etapa 6.
 
-La interfaz muestra la huella del QR/enlace, la huella temporal de este dispositivo y
-la huella del par autenticado. Cada archivo del catálogo conserva la huella de la
-conexión con la que fue compartido.
+La interfaz muestra la huella temporal de este dispositivo debajo del QR y la huella
+del par autenticado. Cada archivo del catálogo conserva la huella de la conexión con
+la que fue compartido.
 
 ## Tracker WebSocket
 

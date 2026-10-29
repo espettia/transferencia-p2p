@@ -75,6 +75,10 @@
 .peer-fingerprint {
   color: #70808e; font: 10px 'DM Mono', monospace; letter-spacing: .08em;
 }
+.device-fingerprint {
+  margin: -7px 0 17px; color: #8b99a5; font: 10px 'DM Mono', monospace;
+  letter-spacing: .04em; text-align: center;
+}
 .fingerprint-panel {
   margin: 24px auto 0; padding: 22px 30px; border: 1px solid #e1e7ee; border-radius: 18px;
   background: #fff; box-shadow: 0 14px 40px rgb(34 55 74 / 5%);

@@ -2,7 +2,7 @@ import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
-import { ConnectionState, fingerprint, PeerConnection } from './peerConnection';
+import { ConnectionState, PeerConnection } from './peerConnection';
 import { CatalogEntry, listCatalog, saveLocalFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
@@ -45,7 +45,6 @@ export function App() {
   const [connectionDetail, setConnectionDetail] = useState('');
   const [peerFingerprint, setPeerFingerprint] = useState('');
   const [localFingerprint, setLocalFingerprint] = useState('');
-  const [qrFingerprint, setQrFingerprint] = useState('');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,12 +58,6 @@ export function App() {
   useEffect(() => {
     window.sessionStorage.setItem(INVITATION_KEY, invitation);
   }, [invitation]);
-
-  useEffect(() => {
-    const value = inviteId ?? new URL(invitation).searchParams.get('invite');
-    if (!value) return;
-    void fingerprintFromText(value).then(setQrFingerprint);
-  }, [inviteId, invitation]);
 
   useEffect(() => {
     const roomId = inviteId ?? new URL(invitation).searchParams.get('invite');
@@ -205,16 +198,17 @@ export function App() {
             <QrCode value={invitation} />
           </div>
           <p className="card-description">Escanea este código desde el otro dispositivo</p>
+          <p className="device-fingerprint">Huella: {localFingerprint || 'Pendiente de autenticación'}</p>
           <button className="secondary-button" type="button" onClick={copyInvitation}>Copiar enlace de conexión</button>
         </article>
 
-        <div className="connector" aria-hidden="true">
+        {connectionState !== 'connected' && <div className="connector" aria-hidden="true">
           <span />
           <strong>o</strong>
           <span />
-        </div>
+        </div>}
 
-        <article className="pairing-card scan-card">
+        {connectionState !== 'connected' && <article className="pairing-card scan-card">
           <div className="card-heading">
             <span className="step-badge">02</span>
             <div>
@@ -250,21 +244,10 @@ export function App() {
             <button className="primary-button" type="button" onClick={startCamera}>Activar cámara <span>→</span></button>
           )}
           <button className="text-button" type="button" onClick={pasteInvitation}>Pegar enlace</button>
-        </article>
+        </article>}
       </section>
 
       <p className={`notice${notice ? ' notice-visible' : ''}`} role="status">{notice}</p>
-      <section className="fingerprint-panel" aria-labelledby="fingerprint-title">
-        <div className="fingerprint-heading">
-          <p className="eyebrow">Identidad de conexión</p>
-          <h2 id="fingerprint-title">Huellas</h2>
-        </div>
-        <div className="fingerprint-grid">
-          <Fingerprint label="QR leído" value={qrFingerprint} />
-          <Fingerprint label="Este dispositivo" value={localFingerprint} />
-          <Fingerprint label="Dispositivo conectado" value={peerFingerprint} />
-        </div>
-      </section>
       <section className={`connection-status connection-${connectionState}`} aria-live="polite">
         <span className="connection-dot" aria-hidden="true" />
         <span>
@@ -326,18 +309,4 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function Fingerprint({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="fingerprint-field">
-      <span>{label}</span>
-      <input type="text" value={value || 'Pendiente de autenticación'} readOnly />
-    </label>
-  );
-}
-
-async function fingerprintFromText(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12).toUpperCase();
 }
