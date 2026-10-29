@@ -46,3 +46,10 @@ npm run preview
 ```
 
 El directorio `dist` generado por Vite puede desplegarse como sitio estático HTTPS.
+
+Para desplegarlo en Cloudflare Workers:
+
+```bash
+npm run build
+npx wrangler deploy
+```
