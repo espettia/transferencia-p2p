@@ -7,6 +7,7 @@ export type CatalogEntry = {
   owner: 'local' | 'remote';
   available: boolean;
   sharedWith?: string;
+  sourceSession?: string;
 };
 
 type StoredEntry = CatalogEntry & { blob?: Blob };
@@ -63,6 +64,48 @@ export async function saveLocalFile(file: File): Promise<CatalogEntry> {
 
 export async function saveRemoteEntry(entry: CatalogEntry): Promise<void> {
   await saveEntry({ ...entry, owner: 'remote', available: false });
+}
+
+export async function markSessionUnavailable(sessionId: string): Promise<void> {
+  const database = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const request = transaction.objectStore(STORE_NAME).openCursor();
+    request.onerror = () => reject(request.error ?? new Error('No se pudo actualizar el catálogo.'));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      const entry = cursor.value as StoredEntry;
+      if (entry.sourceSession === sessionId) {
+        cursor.update({ ...entry, available: false });
+      }
+      cursor.continue();
+    };
+  });
+  database.close();
+}
+
+export async function markRemoteUnavailable(): Promise<void> {
+  const database = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, 'readwrite');
+    const request = transaction.objectStore(STORE_NAME).openCursor();
+    request.onerror = () => reject(request.error ?? new Error('No se pudo actualizar el catálogo.'));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      const entry = cursor.value as StoredEntry;
+      if (entry.owner === 'remote') cursor.update({ ...entry, available: false });
+      cursor.continue();
+    };
+  });
+  database.close();
 }
 
 export async function getLocalFile(id: string): Promise<{ entry: CatalogEntry; blob: Blob } | null> {

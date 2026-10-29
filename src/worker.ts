@@ -42,6 +42,7 @@ async function handleTracker(request: Request, env: WorkerEnv): Promise<Response
 export class Room {
   private readonly sockets = new Set<WebSocket>();
   private readonly socketRooms = new Map<WebSocket, string>();
+  private readonly socketIds = new Map<WebSocket, string>();
 
   constructor(_state: unknown, _env: WorkerEnv) {}
 
@@ -92,8 +93,10 @@ export class Room {
       this.sendError(socket, 'La sala alcanzó el límite de 100 sesiones.');
       return;
     }
+    const peerId = crypto.randomUUID();
     this.socketRooms.set(socket, message.roomId);
-    socket.send(JSON.stringify({ type: 'ready', roomId: message.roomId }));
+    this.socketIds.set(socket, peerId);
+    socket.send(JSON.stringify({ type: 'ready', roomId: message.roomId, peerId }));
     for (const member of roomMembers) {
       if (member.readyState === WebSocket.OPEN) member.send(JSON.stringify({ type: 'peer-joined' }));
     }
@@ -112,7 +115,16 @@ export class Room {
   }
 
   private remove(socket: WebSocket): void {
+    const roomId = this.socketRooms.get(socket);
+    const peerId = this.socketIds.get(socket);
     this.sockets.delete(socket);
     this.socketRooms.delete(socket);
+    this.socketIds.delete(socket);
+    if (!roomId || !peerId) return;
+    for (const [member, memberRoom] of this.socketRooms) {
+      if (memberRoom === roomId && member.readyState === WebSocket.OPEN) {
+        member.send(JSON.stringify({ type: 'peer-left', peerId }));
+      }
+    }
   }
 }

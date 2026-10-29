@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
 import { ConnectionState, PeerConnection } from './peerConnection';
-import { CatalogEntry, clearCatalog, getLocalFile, listCatalog, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
+import { CatalogEntry, clearCatalog, getLocalFile, listCatalog, markRemoteUnavailable, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 const INVITATION_ROLE_KEY = 'transferencia-p2p-invitation-role';
@@ -74,7 +74,7 @@ export function App() {
     const peer = new PeerConnection(roomId, !isGuest, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
-      if (state === 'connected') setCatalogOpen(true);
+      if (state === 'connected' || state === 'swarm') setCatalogOpen(true);
       if (state === 'error' && !disposed) {
         retryTimer = window.setTimeout(() => setReconnectAttempt((attempt) => attempt + 1), 2500);
       }
@@ -89,6 +89,9 @@ export function App() {
       window.setTimeout(() => setNotice(''), 3000);
     }, (id, progress) => {
       setTransferProgress((current) => ({ ...current, [id]: progress }));
+    }, (peerId) => {
+      void markRemoteUnavailable().then(async () => setCatalog(await listCatalog()))
+        .catch(() => setCatalogError('No se pudo actualizar la disponibilidad del catálogo.'));
     });
     peerRef.current = peer;
     void peer.connect();
@@ -308,6 +311,7 @@ export function App() {
         <span>
           {connectionState === 'idle' && 'Listo para conectar'}
           {connectionState === 'connecting' && 'Conectando con el tracker…'}
+          {connectionState === 'swarm' && 'Sesión activa en el swarm'}
           {connectionState === 'waiting' && 'Esperando al otro dispositivo…'}
           {connectionState === 'authenticating' && (connectionDetail || 'Verificando la identidad del otro dispositivo…')}
           {connectionState === 'connected' && (connectionDetail || 'Dispositivos autenticados y conectados directamente')}
@@ -315,7 +319,7 @@ export function App() {
         </span>
         {peerFingerprint && <small className="peer-fingerprint">Huella: {peerFingerprint}</small>}
       </section>
-      {connectionState === 'connected' && catalogOpen && <section className="catalog-panel" aria-labelledby="catalog-title">
+      {(connectionState === 'connected' || connectionState === 'swarm') && catalogOpen && <section className="catalog-panel" aria-labelledby="catalog-title">
         <div className="catalog-heading">
           <button className="catalog-qr" type="button" onClick={() => setCatalogOpen(false)} aria-label="Volver al QR">
             <QrCode value={invitation} />
@@ -324,15 +328,15 @@ export function App() {
             <p className="eyebrow">Después de autenticar</p>
             <h2 id="catalog-title">Catálogo de archivos</h2>
           </div>
-          <label className={`file-button${connectionState === 'connected' ? '' : ' file-button-disabled'}`}>
+          <label className={`file-button${connectionState === 'connected' || connectionState === 'swarm' ? '' : ' file-button-disabled'}`}>
             Añadir archivo
-            <input type="file" onChange={addFile} disabled={connectionState !== 'connected'} />
+            <input type="file" onChange={addFile} disabled={connectionState !== 'connected' && connectionState !== 'swarm'} />
           </label>
         </div>
         <p className="catalog-description">
-          {connectionState === 'connected'
-            ? 'Los nuevos archivos aparecen automáticamente en el otro dispositivo.'
-            : 'Autentica ambos dispositivos para habilitar el catálogo compartido.'}
+          {connectionState === 'swarm'
+            ? 'Esta sesión ya pertenece al swarm; sus archivos se compartirán al conectar otros dispositivos.'
+            : 'Los nuevos archivos aparecen automáticamente en el swarm.'}
         </p>
         {catalogError && <p className="catalog-error" role="alert">{catalogError}</p>}
         {catalog.length === 0 ? (

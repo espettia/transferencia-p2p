@@ -1,9 +1,10 @@
-export type ConnectionState = 'idle' | 'connecting' | 'waiting' | 'authenticating' | 'connected' | 'error';
+export type ConnectionState = 'idle' | 'connecting' | 'swarm' | 'waiting' | 'authenticating' | 'connected' | 'error';
 import type { CatalogEntry } from './catalog';
 
 type SignalMessage =
-  | { type: 'ready'; roomId: string }
+  | { type: 'ready'; roomId: string; peerId: string }
   | { type: 'peer-joined' }
+  | { type: 'peer-left'; peerId: string }
   | { type: 'offer'; description: RTCSessionDescriptionInit }
   | { type: 'answer'; description: RTCSessionDescriptionInit }
   | { type: 'candidate'; candidate: RTCIceCandidateInit }
@@ -61,6 +62,7 @@ export class PeerConnection {
     private readonly onFileRequest?: (id: string) => Promise<LocalFile | null>,
     private readonly onFileReceived?: (entry: CatalogEntry, blob: Blob) => Promise<void>,
     private readonly onTransferProgress?: (id: string, progress: number) => void,
+    private readonly onPeerLeft?: (peerId: string) => void,
   ) {}
 
   async connect(): Promise<void> {
@@ -158,7 +160,11 @@ export class PeerConnection {
     if (message.type === 'ready') {
       this.registered = true;
       this.onLocalIdentity?.(this.localFingerprint);
-      this.onStateChange('waiting');
+      this.onStateChange('swarm', 'Sesión registrada en el swarm');
+      return;
+    }
+    if (message.type === 'peer-left') {
+      this.onPeerLeft?.(message.peerId);
       return;
     }
     if (message.type === 'peer-joined' && this.isHost) {
