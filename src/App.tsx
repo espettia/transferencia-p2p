@@ -72,7 +72,8 @@ export function App() {
     }, async (id) => getLocalFile(id), async (entry, blob) => {
       await saveReceivedFile(entry, blob);
       setCatalog(await listCatalog());
-      setNotice(`"${entry.name}" se transfirió correctamente.`);
+      downloadFile(blob, entry.name);
+      setNotice(`"${entry.name}" se guardó en las descargas del dispositivo.`);
       window.setTimeout(() => setNotice(''), 3000);
     }, (id, progress) => {
       setTransferProgress((current) => ({ ...current, [id]: progress }));
@@ -339,4 +340,13 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function downloadFile(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

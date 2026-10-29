@@ -37,6 +37,8 @@ catálogo remoto.
 El contenido se transfiere bajo demanda: al seleccionar “Transferir”, el dispositivo
 remoto solicita el archivo y el emisor lo envía por el canal WebRTC en bloques de 16 KB.
 Al completar la recepción, el blob se guarda en IndexedDB y el elemento queda disponible.
+Además, se inicia una descarga del archivo para guardarlo en el sistema operativo,
+normalmente en la carpeta de descargas configurada por el navegador.
 
 La interfaz muestra debajo del QR la huella temporal de este dispositivo, generada al
 registrarse en el tracker, y la huella del par autenticado. La misma identidad se
