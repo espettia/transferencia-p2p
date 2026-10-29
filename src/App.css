@@ -34,12 +34,7 @@
   display: grid; place-items: center; height: 275px; margin: 24px 0 17px; border-radius: 14px;
   background: #fafbfd;
 }
-.qr-placeholder { display: grid; place-items: center; width: 190px; height: 190px; border: 7px solid #17212b; background: #fff; }
-.qr-grid { position: relative; width: 100%; height: 100%; background-image: radial-gradient(#17212b 1.7px, transparent 1.7px); background-size: 11px 11px; }
-.qr-corner { position: absolute; width: 39px; height: 39px; border: 7px solid #17212b; background: #fff; }
-.qr-corner::after { content: ''; display: block; width: 11px; height: 11px; margin: 7px; background: #17212b; }
-.qr-corner-top-left { top: 0; left: 0; }.qr-corner-top-right { top: 0; right: 0; }.qr-corner-bottom-left { bottom: 0; left: 0; }
-.qr-dots { position: absolute; right: 10px; bottom: 10px; width: 29px; height: 29px; background: #17212b; }
+.qr-code { width: 190px; height: 190px; background: #fff; }
 .card-description { min-height: 24px; margin: 0 0 17px; color: #70808e; font-size: 13px; line-height: 1.5; text-align: center; }
 .secondary-button, .primary-button {
   width: 100%; padding: 13px 15px; border: 0; border-radius: 9px; cursor: pointer; font-size: 13px;
@@ -51,7 +46,10 @@
 .connector { display: flex; flex-direction: column; align-items: center; gap: 11px; color: #aab5bf; }
 .connector span { width: 1px; height: 38px; background: #d7dfe6; }
 .connector strong { font: 12px 'DM Mono', monospace; font-weight: 400; }
-.camera-placeholder { background: #17212b; overflow: hidden; }
+.camera-placeholder { position: relative; background: #17212b; overflow: hidden; }
+.camera-active { background: #05080b; }
+.camera-video { width: 100%; height: 100%; object-fit: cover; }
+.camera-active .camera-frame { position: absolute; inset: 50%; transform: translate(-50%, -50%); }
 .camera-frame { position: relative; width: 170px; height: 170px; border: 1px solid rgb(255 255 255 / 28%); border-radius: 12px; }
 .camera-corner { position: absolute; width: 22px; height: 22px; border-color: #ef6a50; border-style: solid; }
 .top-left { top: -1px; left: -1px; border-width: 3px 0 0 3px; }.top-right { top: -1px; right: -1px; border-width: 3px 3px 0 0; }
@@ -60,6 +58,8 @@
 .privacy-note { display: flex; justify-content: center; gap: 10px; margin-top: 37px; color: #8b99a5; font-size: 11px; line-height: 1.6; text-align: left; }
 .privacy-note span { color: #ef6a50; }
 .privacy-note p { margin: 0; }
+.notice { min-height: 18px; margin: 18px 0 -18px; color: #ef6a50; font-size: 12px; text-align: center; opacity: 0; }
+.notice-visible { opacity: 1; }
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }
