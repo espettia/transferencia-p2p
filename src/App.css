@@ -5,15 +5,15 @@
 }
 
 .app-header {
-  display: flex; align-items: center; justify-content: space-between; min-height: 92px; margin: -34px 0 0;
+  display: flex; align-items: center; justify-content: space-between; min-height: 224px; margin: -34px 0 0;
   padding: 14px 18px; border-bottom: 6px solid #17212b; background: #fff;
 }
 .header-qr {
-  display: grid; place-items: center; flex: 0 0 72px; width: 72px; height: 72px;
-  box-sizing: border-box; overflow: hidden; padding: 4px; border: 1px solid #dfe5eb;
+  display: grid; place-items: center; flex: 0 0 210px; width: 210px; height: 210px;
+  box-sizing: border-box; padding: 9px; border: 1px solid #dfe5eb;
   border-radius: 8px; background: #fff; cursor: pointer; line-height: 0;
 }
-.header-qr .qr-code { display: block; width: 62px; height: 62px; }
+.header-qr .qr-code { display: block; width: 190px; height: 190px; }
 .header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .new-room-button {
   padding: 9px 13px; border: 1px solid #dfe5eb; border-radius: 8px;
@@ -152,7 +152,9 @@
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }
-  .app-header { margin-top: -22px; padding-inline: 8px; }
+  .app-header { min-height: 204px; margin-top: -22px; padding-inline: 8px; }
+  .header-qr { flex-basis: 190px; width: 190px; height: 190px; padding: 4px; }
+  .header-qr .qr-code { width: 180px; height: 180px; }
   .new-room-button { padding-inline: 9px; }
   .access-room-button { padding-inline: 9px; }
   .hero { margin: 55px auto 30px; }.hero h2 { font-size: 48px; }
