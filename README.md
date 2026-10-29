@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-La aplicación genera invitaciones por sesión, muestra un QR real, permite copiar o pegar enlaces y puede activar la cámara para leer códigos QR. La conexión WebRTC usa un tracker WebSocket únicamente para la señalización; los archivos no pasan por ese servicio.
+La aplicación genera huellas de sesión, muestra un QR que contiene únicamente esa huella, permite copiar o pegar la huella y puede activar la cámara para leerla. La conexión WebRTC usa un tracker WebSocket únicamente para la señalización; los archivos no pasan por ese servicio.
 
 ## Etapas del proyecto
 
@@ -54,7 +54,12 @@ El cliente espera un tracker compatible con estos mensajes JSON:
 - Relay: `{ "type": "offer"|"answer", "description": { ... } }` y `{ "type": "candidate", "candidate": { ... } }`
 - Error: `{ "type": "error", "message": "..." }`
 
-Configura la URL con `VITE_TRACKER_URL` (por ejemplo, `wss://tracker.example.com`). Si no se configura, se usa `ws(s)://<host>/tracker`.
+Configura la URL del tracker con `VITE_TRACKER_URL` si es necesario. Si no se configura, se usa el mismo origen seguro (`ws(s)://<host>/tracker`).
+
+El QR no contiene una URL. Contiene únicamente una huella de sesión temporal de 36
+caracteres hexadecimales. El segundo dispositivo abre la aplicación por separado,
+escanea esa huella y el tracker la usa para encontrar la sala. Cualquiera que obtenga
+la huella puede solicitar acceso a esa sesión.
 
 El despliegue incluye un tracker en `/tracker`. Cada dispositivo se registra primero
 en la sala con `create` o `join`; el tracker responde `ready` antes de permitir la

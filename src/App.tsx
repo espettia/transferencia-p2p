@@ -6,12 +6,11 @@ import { ConnectionState, PeerConnection } from './peerConnection';
 import { CatalogEntry, getLocalFile, listCatalog, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
+const INVITATION_ROLE_KEY = 'transferencia-p2p-invitation-role';
 
 function createInvitation() {
-  const id = typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${window.location.origin}/?invite=${encodeURIComponent(id)}`;
+  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 function QrCode({ value }: { value: string }) {
@@ -33,10 +32,9 @@ function QrCode({ value }: { value: string }) {
 }
 
 export function App() {
-  const inviteId = new URLSearchParams(window.location.search).get('invite');
   const [invitation, setInvitation] = useState(() => {
     const saved = window.sessionStorage.getItem(INVITATION_KEY);
-    return saved ?? createInvitation();
+    return saved && /^[0-9A-F]{36}$/i.test(saved) ? saved : createInvitation();
   });
   const [notice, setNotice] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -61,9 +59,9 @@ export function App() {
   }, [invitation]);
 
   useEffect(() => {
-    const roomId = inviteId ?? new URL(invitation).searchParams.get('invite');
-    if (!roomId) return;
-    const peer = new PeerConnection(roomId, !inviteId, (state, detail) => {
+    const roomId = invitation;
+    const isGuest = window.sessionStorage.getItem(INVITATION_ROLE_KEY) === 'guest';
+    const peer = new PeerConnection(roomId, !isGuest, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
     }, setPeerFingerprint, setLocalFingerprint, (entry) => {
@@ -84,7 +82,7 @@ export function App() {
       peer.close();
       peerRef.current = null;
     };
-  }, [inviteId, invitation]);
+  }, [invitation]);
 
   useEffect(() => {
     if (connectionState !== 'connected' || !peerRef.current) return;
@@ -104,7 +102,15 @@ export function App() {
     const scanner = new QrScanner(
       videoRef.current,
       (result) => {
-        if (active) window.location.href = result.data;
+        if (!active) return;
+        const token = result.data.trim();
+        if (!/^[0-9A-F]{36}$/i.test(token)) {
+          setCameraError('El QR no contiene una huella de sesión válida.');
+          return;
+        }
+        window.sessionStorage.setItem(INVITATION_KEY, token.toUpperCase());
+        window.sessionStorage.setItem(INVITATION_ROLE_KEY, 'guest');
+        window.location.reload();
       },
       { returnDetailedScanResult: true },
     );
@@ -123,9 +129,9 @@ export function App() {
   const copyInvitation = async () => {
     try {
       await navigator.clipboard.writeText(invitation);
-      setNotice('Enlace copiado');
+      setNotice('Huella copiada');
     } catch {
-      setNotice('No se pudo copiar el enlace');
+      setNotice('No se pudo copiar la huella');
     }
     window.setTimeout(() => setNotice(''), 2200);
   };
@@ -143,14 +149,16 @@ export function App() {
   };
 
   const pasteInvitation = async () => {
-    const value = window.prompt('Pega aquí el enlace de conexión');
+    const value = window.prompt('Pega aquí la huella de sesión');
     if (!value) return;
     try {
-      const url = new URL(value);
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('invalid protocol');
-      window.location.href = url.toString();
+      const token = value.trim();
+      if (!/^[0-9A-F]{36}$/i.test(token)) throw new Error('invalid fingerprint');
+      window.sessionStorage.setItem(INVITATION_KEY, token.toUpperCase());
+      window.sessionStorage.setItem(INVITATION_ROLE_KEY, 'guest');
+      window.location.reload();
     } catch {
-      setNotice('El enlace no es válido');
+      setNotice('La huella no es válida');
       window.setTimeout(() => setNotice(''), 2200);
     }
   };
@@ -216,9 +224,9 @@ export function App() {
           <div className="qr-area">
             <QrCode value={invitation} />
           </div>
-          <p className="card-description">Escanea este código desde el otro dispositivo</p>
+          <p className="card-description">Escanea esta huella desde el otro dispositivo</p>
           <p className="device-fingerprint">Huella: {localFingerprint || 'Pendiente de autenticación'}</p>
-          <button className="secondary-button" type="button" onClick={copyInvitation}>Copiar enlace de conexión</button>
+          <button className="secondary-button" type="button" onClick={copyInvitation}>Copiar huella de sesión</button>
         </article>
 
         {connectionState !== 'connected' && <div className="connector" aria-hidden="true">
@@ -256,13 +264,13 @@ export function App() {
               </div>
             )}
           </div>
-          <p className="card-description">{cameraError || (cameraOpen ? 'Apunta al código QR del otro dispositivo' : 'Escanea el QR del otro dispositivo')}</p>
+          <p className="card-description">{cameraError || (cameraOpen ? 'Apunta a la huella QR del otro dispositivo' : 'Escanea la huella QR del otro dispositivo')}</p>
           {cameraOpen ? (
             <button className="secondary-button" type="button" onClick={closeCamera}>Cerrar cámara</button>
           ) : (
             <button className="primary-button" type="button" onClick={startCamera}>Activar cámara <span>→</span></button>
           )}
-          <button className="text-button" type="button" onClick={pasteInvitation}>Pegar enlace</button>
+          <button className="text-button" type="button" onClick={pasteInvitation}>Pegar huella</button>
         </article>}
       </section>
 
