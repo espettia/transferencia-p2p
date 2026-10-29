@@ -247,12 +247,10 @@ export function App() {
         <button className="header-qr" type="button" onClick={() => setCatalogOpen(true)} aria-label="Mostrar código QR de esta sala">
           <QrCode value={invitation} />
         </button>
-        <div className="header-title">
-          <p className="eyebrow">Transferencia directa</p>
-          <h1>Transferencia P2P</h1>
+        <div className="header-actions">
+          <button className="new-room-button" type="button" onClick={createNewRoom} disabled={catalog.length === 0}>Nueva sala</button>
+          <button className="access-room-button" type="button" onClick={startCamera}>Acceder a sala</button>
         </div>
-        <button className="new-room-button" type="button" onClick={createNewRoom} disabled={catalog.length === 0}>Nueva sala</button>
-        <button className="access-room-button" type="button" onClick={startCamera}>Acceder a sala</button>
       </header>
 
       {roomEntryOpen && <section className="pairing-grid initial-pairing" aria-label="Acceder a otra sala">
