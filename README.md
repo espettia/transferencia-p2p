@@ -61,9 +61,9 @@ caracteres hexadecimales. El segundo dispositivo abre la aplicación por separad
 escanea esa huella y el tracker la usa para encontrar la sala. Cualquiera que obtenga
 la huella puede solicitar acceso a esa sesión.
 
-El despliegue incluye un tracker en `/tracker`. Cada dispositivo se registra primero
-en la sala con `create` o `join`; el tracker responde `ready` antes de permitir la
-señalización. Las salas admiten dos dispositivos y se eliminan al cerrar sus conexiones.
+El despliegue incluye un tracker en `/tracker`. Cada sesión se registra primero en la
+sala con `create` o `join`; el tracker responde `ready` antes de permitir la señalización.
+Las salas admiten hasta 100 sesiones y se eliminan al cerrar sus conexiones.
 
 ## Producción
 

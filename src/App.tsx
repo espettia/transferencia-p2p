@@ -46,6 +46,8 @@ export function App() {
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [transferProgress, setTransferProgress] = useState<Record<string, number>>({});
+  const [roomEntryOpen, setRoomEntryOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
@@ -64,6 +66,7 @@ export function App() {
     const peer = new PeerConnection(roomId, !isGuest, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
+      if (state === 'connected') setCatalogOpen(true);
     }, setPeerFingerprint, setLocalFingerprint, (entry) => {
       void saveRemoteEntry(entry).then(async () => setCatalog(await listCatalog()))
         .catch(() => setCatalogError('No se pudo actualizar el catálogo remoto.'));
@@ -138,6 +141,7 @@ export function App() {
 
   const startCamera = async () => {
     setCameraError('');
+    setRoomEntryOpen(true);
     setCameraOpen(true);
   };
 
@@ -203,16 +207,7 @@ export function App() {
         </div>
       </header>
 
-      <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">Sin cuentas · Sin nube · Privado</p>
-        <h2 id="page-title">Comparte archivos<br /><span>directamente.</span></h2>
-        <p className="hero-copy">
-          Conecta dos dispositivos con un código QR y transfiere tus archivos de forma
-          directa y segura.
-        </p>
-      </section>
-
-      <section className="pairing-grid" aria-label="Opciones de emparejamiento">
+      {!catalogOpen && <section className="pairing-grid initial-pairing" aria-label="Identificador de sesión">
         <article className="pairing-card own-card">
           <div className="card-heading">
             <span className="step-badge">01</span>
@@ -221,21 +216,22 @@ export function App() {
               <h3>Mi QR</h3>
             </div>
           </div>
-          <div className="qr-area">
-            <QrCode value={invitation} />
-          </div>
+          <button className="qr-trigger" type="button" onClick={() => connectionState === 'connected' && setCatalogOpen(true)} disabled={connectionState !== 'connected'}>
+            <div className="qr-area"><QrCode value={invitation} /></div>
+          </button>
           <p className="card-description">Escanea esta huella desde el otro dispositivo</p>
           <p className="device-fingerprint">Huella: {localFingerprint || 'Pendiente de autenticación'}</p>
-          <button className="secondary-button" type="button" onClick={copyInvitation}>Copiar huella de sesión</button>
+          <button className="primary-button" type="button" onClick={startCamera}>Entrar a una sala <span>→</span></button>
+          <button className="text-button" type="button" onClick={copyInvitation}>Copiar huella de sesión</button>
         </article>
 
-        {connectionState !== 'connected' && <div className="connector" aria-hidden="true">
+        {roomEntryOpen && connectionState !== 'connected' && <div className="connector" aria-hidden="true">
           <span />
           <strong>o</strong>
           <span />
         </div>}
 
-        {connectionState !== 'connected' && <article className="pairing-card scan-card">
+        {roomEntryOpen && connectionState !== 'connected' && <article className="pairing-card scan-card">
           <div className="card-heading">
             <span className="step-badge">02</span>
             <div>
@@ -273,6 +269,7 @@ export function App() {
           <button className="text-button" type="button" onClick={pasteInvitation}>Pegar huella</button>
         </article>}
       </section>
+      }
 
       <p className={`notice${notice ? ' notice-visible' : ''}`} role="status">{notice}</p>
       <section className={`connection-status connection-${connectionState}`} aria-live="polite">
@@ -287,8 +284,11 @@ export function App() {
         </span>
         {peerFingerprint && <small className="peer-fingerprint">Huella: {peerFingerprint}</small>}
       </section>
-      <section className="catalog-panel" aria-labelledby="catalog-title">
+      {connectionState === 'connected' && catalogOpen && <section className="catalog-panel" aria-labelledby="catalog-title">
         <div className="catalog-heading">
+          <button className="catalog-qr" type="button" onClick={() => setCatalogOpen(false)} aria-label="Volver al QR">
+            <QrCode value={invitation} />
+          </button>
           <div>
             <p className="eyebrow">Después de autenticar</p>
             <h2 id="catalog-title">Catálogo de archivos</h2>
@@ -335,7 +335,7 @@ export function App() {
             ))}
           </ul>
         )}
-      </section>
+      </section>}
       <footer className="privacy-note">
         <span aria-hidden="true">◈</span>
         <p>Los archivos viajan directamente entre tus dispositivos.<br />No se almacenan en ningún servidor.</p>

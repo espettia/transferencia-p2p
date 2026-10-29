@@ -88,14 +88,14 @@ export class Room {
     const roomMembers = [...this.socketRooms.entries()]
       .filter(([, roomId]) => roomId === message.roomId)
       .map(([member]) => member);
-    if (roomMembers.length >= 2 || this.socketRooms.has(socket)) {
-      this.sendError(socket, 'La sala ya tiene dos dispositivos.');
+    if (roomMembers.length >= 100 || this.socketRooms.has(socket)) {
+      this.sendError(socket, 'La sala alcanzó el límite de 100 sesiones.');
       return;
     }
     this.socketRooms.set(socket, message.roomId);
     socket.send(JSON.stringify({ type: 'ready', roomId: message.roomId }));
-    if (roomMembers.length === 1) {
-      roomMembers[0].send(JSON.stringify({ type: 'peer-joined' }));
+    for (const member of roomMembers) {
+      if (member.readyState === WebSocket.OPEN) member.send(JSON.stringify({ type: 'peer-joined' }));
     }
   }
 
