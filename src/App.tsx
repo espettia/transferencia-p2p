@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
 import { ConnectionState, PeerConnection } from './peerConnection';
+import { CatalogEntry, listCatalog, saveLocalFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 
@@ -43,9 +44,15 @@ export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>('idle');
   const [connectionDetail, setConnectionDetail] = useState('');
   const [peerFingerprint, setPeerFingerprint] = useState('');
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [catalogError, setCatalogError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
+
+  useEffect(() => {
+    void listCatalog().then(setCatalog).catch(() => setCatalogError('No se pudo abrir el catálogo local.'));
+  }, []);
 
   useEffect(() => {
     window.sessionStorage.setItem(INVITATION_KEY, invitation);
@@ -57,7 +64,10 @@ export function App() {
     const peer = new PeerConnection(roomId, !inviteId, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
-    }, setPeerFingerprint);
+    }, setPeerFingerprint, (entry) => {
+      void saveRemoteEntry(entry).then(async () => setCatalog(await listCatalog()))
+        .catch(() => setCatalogError('No se pudo actualizar el catálogo remoto.'));
+    });
     peerRef.current = peer;
     void peer.connect();
     return () => {
@@ -65,6 +75,18 @@ export function App() {
       peerRef.current = null;
     };
   }, [inviteId, invitation]);
+
+  useEffect(() => {
+    if (connectionState !== 'connected' || !peerRef.current) return;
+    for (const entry of catalog.filter((item) => item.owner === 'local')) {
+      try {
+        peerRef.current.sendCatalogEntry(entry);
+      } catch {
+        setCatalogError('No se pudo sincronizar el catálogo.');
+        break;
+      }
+    }
+  }, [connectionState, catalog]);
 
   useEffect(() => {
     if (!cameraOpen || !videoRef.current) return;
@@ -120,6 +142,26 @@ export function App() {
     } catch {
       setNotice('El enlace no es válido');
       window.setTimeout(() => setNotice(''), 2200);
+    }
+  };
+
+  const addFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const entry = await saveLocalFile(file);
+      setCatalog(await listCatalog());
+      if (connectionState !== 'connected' || !peerRef.current) {
+        setNotice('Archivo guardado localmente; conecta el otro dispositivo para sincronizarlo.');
+        window.setTimeout(() => setNotice(''), 3000);
+        return;
+      }
+      peerRef.current.sendCatalogEntry(entry);
+      setNotice('Archivo añadido al catálogo de ambos dispositivos.');
+      window.setTimeout(() => setNotice(''), 3000);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'No se pudo añadir el archivo.');
     }
   };
 
@@ -216,10 +258,52 @@ export function App() {
         </span>
         {peerFingerprint && <small className="peer-fingerprint">Huella: {peerFingerprint}</small>}
       </section>
+      <section className="catalog-panel" aria-labelledby="catalog-title">
+        <div className="catalog-heading">
+          <div>
+            <p className="eyebrow">Después de autenticar</p>
+            <h2 id="catalog-title">Catálogo de archivos</h2>
+          </div>
+          <label className={`file-button${connectionState === 'connected' ? '' : ' file-button-disabled'}`}>
+            Añadir archivo
+            <input type="file" onChange={addFile} disabled={connectionState !== 'connected'} />
+          </label>
+        </div>
+        <p className="catalog-description">
+          {connectionState === 'connected'
+            ? 'Los nuevos archivos aparecen automáticamente en el otro dispositivo.'
+            : 'Autentica ambos dispositivos para habilitar el catálogo compartido.'}
+        </p>
+        {catalogError && <p className="catalog-error" role="alert">{catalogError}</p>}
+        {catalog.length === 0 ? (
+          <p className="catalog-empty">Todavía no hay archivos en el catálogo.</p>
+        ) : (
+          <ul className="catalog-list">
+            {catalog.map((entry) => (
+              <li className="catalog-item" key={entry.id}>
+                <span className="file-icon" aria-hidden="true">□</span>
+                <span className="file-details">
+                  <strong>{entry.name}</strong>
+                  <small>{formatSize(entry.size)} · {entry.owner === 'local' ? 'En este dispositivo' : 'Del otro dispositivo'}</small>
+                </span>
+                <span className={`file-state${entry.available ? ' file-state-ready' : ''}`}>
+                  {entry.available ? 'Disponible' : 'Pendiente'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <footer className="privacy-note">
         <span aria-hidden="true">◈</span>
         <p>Los archivos viajan directamente entre tus dispositivos.<br />No se almacenan en ningún servidor.</p>
       </footer>
     </main>
   );
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

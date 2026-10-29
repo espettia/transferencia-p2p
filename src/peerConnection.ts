@@ -1,4 +1,5 @@
 export type ConnectionState = 'idle' | 'connecting' | 'waiting' | 'authenticating' | 'connected' | 'error';
+import type { CatalogEntry } from './catalog';
 
 type SignalMessage =
   | { type: 'ready'; roomId: string }
@@ -13,6 +14,7 @@ type TrackerMessage = SignalPayload | { type: 'create' | 'join'; roomId: string 
 type AuthMessage =
   | { type: 'auth-hello'; publicKey: JsonWebKey; nonce: string }
   | { type: 'auth-proof'; signature: string };
+type ChannelMessage = AuthMessage | { type: 'catalog-entry'; entry: CatalogEntry };
 
 type PeerIdentity = {
   publicKey: JsonWebKey;
@@ -45,6 +47,7 @@ export class PeerConnection {
     private readonly isHost: boolean,
     private readonly onStateChange: (state: ConnectionState, detail?: string) => void,
     private readonly onPeerIdentity?: (fingerprint: string) => void,
+    private readonly onCatalogEntry?: (entry: CatalogEntry) => void,
   ) {}
 
   async connect(): Promise<void> {
@@ -107,6 +110,13 @@ export class PeerConnection {
     this.remoteSignature = null;
     this.localSignature = null;
     this.registered = false;
+  }
+
+  sendCatalogEntry(entry: CatalogEntry): void {
+    if (this.dataChannel?.readyState !== 'open') {
+      throw new Error('El dispositivo todavía no está conectado.');
+    }
+    this.dataChannel.send(JSON.stringify({ type: 'catalog-entry', entry } satisfies ChannelMessage));
   }
 
   private send(message: TrackerMessage): void {
@@ -174,7 +184,11 @@ export class PeerConnection {
     };
     channel.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data as string) as AuthMessage;
+        const message = JSON.parse(event.data as string) as ChannelMessage;
+        if (message.type === 'catalog-entry') {
+          this.onCatalogEntry?.(message.entry);
+          return;
+        }
         void this.handleAuthentication(message);
       } catch {
         this.onStateChange('error', 'El dispositivo envió un mensaje no válido.');
