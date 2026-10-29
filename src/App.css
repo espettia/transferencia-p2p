@@ -114,6 +114,11 @@
 .file-details strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .file-details small, .file-state { color: #8b99a5; font-size: 11px; }
 .file-state-ready { color: #23845b; }
+.transfer-button {
+  padding: 7px 10px; border: 1px solid #ef6a50; border-radius: 7px; color: #ef6a50;
+  background: #fff; cursor: pointer; font-size: 11px;
+}
+.transfer-button:disabled { cursor: wait; opacity: .65; }
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }

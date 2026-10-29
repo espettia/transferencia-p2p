@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
 import { ConnectionState, PeerConnection } from './peerConnection';
-import { CatalogEntry, listCatalog, saveLocalFile, saveRemoteEntry } from './catalog';
+import { CatalogEntry, getLocalFile, listCatalog, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 
@@ -47,6 +47,7 @@ export function App() {
   const [localFingerprint, setLocalFingerprint] = useState('');
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [catalogError, setCatalogError] = useState('');
+  const [transferProgress, setTransferProgress] = useState<Record<string, number>>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
@@ -68,6 +69,13 @@ export function App() {
     }, setPeerFingerprint, setLocalFingerprint, (entry) => {
       void saveRemoteEntry(entry).then(async () => setCatalog(await listCatalog()))
         .catch(() => setCatalogError('No se pudo actualizar el catálogo remoto.'));
+    }, async (id) => getLocalFile(id), async (entry, blob) => {
+      await saveReceivedFile(entry, blob);
+      setCatalog(await listCatalog());
+      setNotice(`"${entry.name}" se transfirió correctamente.`);
+      window.setTimeout(() => setNotice(''), 3000);
+    }, (id, progress) => {
+      setTransferProgress((current) => ({ ...current, [id]: progress }));
     });
     peerRef.current = peer;
     void peer.connect();
@@ -163,6 +171,16 @@ export function App() {
       window.setTimeout(() => setNotice(''), 3000);
     } catch (error) {
       setCatalogError(error instanceof Error ? error.message : 'No se pudo añadir el archivo.');
+    }
+  };
+
+  const requestFile = (entry: CatalogEntry) => {
+    if (!peerRef.current || connectionState !== 'connected') return;
+    try {
+      setTransferProgress((current) => ({ ...current, [entry.id]: 0 }));
+      peerRef.current.requestFile(entry.id);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'No se pudo solicitar el archivo.');
     }
   };
 
@@ -292,6 +310,18 @@ export function App() {
                   {entry.available ? 'Disponible' : 'Pendiente'}
                   {entry.sharedWith && <small> · {entry.sharedWith}</small>}
                 </span>
+                {entry.owner === 'remote' && !entry.available && (
+                  <button
+                    className="transfer-button"
+                    type="button"
+                    onClick={() => requestFile(entry)}
+                    disabled={transferProgress[entry.id] !== undefined && transferProgress[entry.id] < 100}
+                  >
+                    {transferProgress[entry.id] !== undefined && transferProgress[entry.id] < 100
+                      ? `${Math.round(transferProgress[entry.id])}%`
+                      : 'Transferir'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

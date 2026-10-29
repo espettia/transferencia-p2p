@@ -56,6 +56,23 @@ export async function saveRemoteEntry(entry: CatalogEntry): Promise<void> {
   await saveEntry({ ...entry, owner: 'remote', available: false });
 }
 
+export async function getLocalFile(id: string): Promise<{ entry: CatalogEntry; blob: Blob } | null> {
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const request = database.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(id);
+    request.onerror = () => reject(request.error ?? new Error('No se pudo leer el archivo.'));
+    request.onsuccess = () => {
+      database.close();
+      const entry = request.result as StoredEntry | undefined;
+      resolve(entry?.blob ? { entry, blob: entry.blob } : null);
+    };
+  });
+}
+
+export async function saveReceivedFile(entry: CatalogEntry, blob: Blob): Promise<void> {
+  await saveEntry({ ...entry, owner: 'remote', available: true, blob });
+}
+
 async function saveEntry(entry: StoredEntry): Promise<void> {
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {

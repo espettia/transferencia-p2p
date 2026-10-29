@@ -22,10 +22,10 @@ Se implementará una etapa a la vez:
 3. **Integrar tracker y conexión WebRTC** — Completada; depende de la etapa 2.
 4. **Implementar autenticación de pares** — Completada; depende de la etapa 3.
 5. **Implementar IndexedDB y catálogo** — Completada; depende de la etapa 4.
-6. **Implementar transferencias por bloques** — Pendiente; depende de la etapa 5.
+6. **Implementar transferencias por bloques** — Completada; depende de la etapa 5.
 7. **Validar, desplegar y documentar** — En progreso; depende de la etapa 6.
 
-La siguiente etapa es **Implementar transferencias por bloques**.
+La siguiente etapa es **Validar, desplegar y documentar**.
 
 La autenticación de pares se realiza después de abrir WebRTC: ambos dispositivos generan
 una identidad ECDSA P-256 temporal, intercambian sus claves públicas y firman un desafío
@@ -33,7 +33,10 @@ común ligado a la invitación. La interfaz muestra la huella corta de la clave 
 
 IndexedDB conserva el catálogo local y los archivos seleccionados. Tras autenticarse,
 cada nuevo archivo comparte sus metadatos por WebRTC y aparece automáticamente en el
-catálogo remoto; la transferencia del contenido binario se implementará en la etapa 6.
+catálogo remoto.
+El contenido se transfiere bajo demanda: al seleccionar “Transferir”, el dispositivo
+remoto solicita el archivo y el emisor lo envía por el canal WebRTC en bloques de 16 KB.
+Al completar la recepción, el blob se guarda en IndexedDB y el elemento queda disponible.
 
 La interfaz muestra debajo del QR la huella temporal de este dispositivo, generada al
 registrarse en el tracker, y la huella del par autenticado. La misma identidad se

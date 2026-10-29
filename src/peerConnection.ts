@@ -15,6 +15,13 @@ type AuthMessage =
   | { type: 'auth-hello'; publicKey: JsonWebKey; nonce: string }
   | { type: 'auth-proof'; signature: string };
 type ChannelMessage = AuthMessage | { type: 'catalog-entry'; entry: CatalogEntry };
+type TransferMessage =
+  | { type: 'file-request'; id: string }
+  | { type: 'file-start'; entry: CatalogEntry }
+  | { type: 'file-chunk'; id: string; data: string }
+  | { type: 'file-end'; id: string };
+type TransferChannelMessage = ChannelMessage | TransferMessage;
+type LocalFile = { entry: CatalogEntry; blob: Blob };
 
 type PeerIdentity = {
   publicKey: JsonWebKey;
@@ -42,6 +49,7 @@ export class PeerConnection {
   private localSignature: string | null = null;
   private registered = false;
   private localFingerprint = '';
+  private incomingTransfers = new Map<string, { entry: CatalogEntry; chunks: string[] }>();
 
   constructor(
     private readonly roomId: string,
@@ -50,6 +58,9 @@ export class PeerConnection {
     private readonly onPeerIdentity?: (fingerprint: string) => void,
     private readonly onLocalIdentity?: (fingerprint: string) => void,
     private readonly onCatalogEntry?: (entry: CatalogEntry) => void,
+    private readonly onFileRequest?: (id: string) => Promise<LocalFile | null>,
+    private readonly onFileReceived?: (entry: CatalogEntry, blob: Blob) => Promise<void>,
+    private readonly onTransferProgress?: (id: string, progress: number) => void,
   ) {}
 
   async connect(): Promise<void> {
@@ -114,6 +125,7 @@ export class PeerConnection {
     this.localSignature = null;
     this.registered = false;
     this.localFingerprint = '';
+    this.incomingTransfers.clear();
   }
 
   sendCatalogEntry(entry: CatalogEntry): void {
@@ -121,6 +133,13 @@ export class PeerConnection {
       throw new Error('El dispositivo todavía no está conectado.');
     }
     this.dataChannel.send(JSON.stringify({ type: 'catalog-entry', entry } satisfies ChannelMessage));
+  }
+
+  requestFile(id: string): void {
+    if (this.dataChannel?.readyState !== 'open') {
+      throw new Error('El dispositivo todavía no está conectado.');
+    }
+    this.dataChannel.send(JSON.stringify({ type: 'file-request', id } satisfies TransferMessage));
   }
 
   private send(message: TrackerMessage): void {
@@ -187,11 +206,39 @@ export class PeerConnection {
         this.close();
       });
     };
-    channel.onmessage = (event) => {
+    channel.onmessage = async (event) => {
       try {
-        const message = JSON.parse(event.data as string) as ChannelMessage;
+        const message = JSON.parse(event.data as string) as TransferChannelMessage;
         if (message.type === 'catalog-entry') {
           this.onCatalogEntry?.(message.entry);
+          return;
+        }
+        if (message.type === 'file-request') {
+          void this.sendFile(message.id).catch(() => {
+            this.onStateChange('error', 'No se pudo enviar el archivo solicitado.');
+          });
+          return;
+        }
+        if (message.type === 'file-start') {
+          this.incomingTransfers.set(message.entry.id, { entry: message.entry, chunks: [] });
+          this.onTransferProgress?.(message.entry.id, 0);
+          return;
+        }
+        if (message.type === 'file-chunk') {
+          const transfer = this.incomingTransfers.get(message.id);
+          if (!transfer) return;
+          transfer.chunks.push(message.data);
+          const received = transfer.chunks.reduce((total, chunk) => total + decodeBase64(chunk).byteLength, 0);
+          this.onTransferProgress?.(message.id, Math.min(99, received / Math.max(1, transfer.entry.size) * 100));
+          return;
+        }
+        if (message.type === 'file-end') {
+          const transfer = this.incomingTransfers.get(message.id);
+          if (!transfer) return;
+          this.incomingTransfers.delete(message.id);
+          const blob = new Blob(transfer.chunks.map(decodeBase64), { type: transfer.entry.type });
+          await this.onFileReceived?.(transfer.entry, blob);
+          this.onTransferProgress?.(message.id, 100);
           return;
         }
         void this.handleAuthentication(message);
@@ -203,6 +250,26 @@ export class PeerConnection {
     channel.onerror = () => {
       this.onStateChange('error', 'Falló el canal seguro entre dispositivos.');
     };
+  }
+
+  private async sendFile(id: string): Promise<void> {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open' || !this.onFileRequest) return;
+    const localFile = await this.onFileRequest(id);
+    if (!localFile) return;
+    const { entry, blob } = localFile;
+    this.dataChannel.send(JSON.stringify({ type: 'file-start', entry } satisfies TransferMessage));
+    const chunkSize = 16 * 1024;
+    for (let offset = 0; offset < blob.size; offset += chunkSize) {
+      const chunk = new Uint8Array(await blob.slice(offset, offset + chunkSize).arrayBuffer());
+      this.dataChannel.send(JSON.stringify({
+        type: 'file-chunk',
+        id,
+        data: encodeBase64(chunk),
+      } satisfies TransferMessage));
+      this.onTransferProgress?.(id, Math.min(99, ((offset + chunk.length) / blob.size) * 100));
+      await waitForBuffer(this.dataChannel);
+    }
+    this.dataChannel.send(JSON.stringify({ type: 'file-end', id } satisfies TransferMessage));
   }
 
   private async startAuthentication(channel: RTCDataChannel): Promise<void> {
@@ -301,4 +368,21 @@ function decodeBytes(value: string): ArrayBuffer {
 export async function fingerprint(publicKey: JsonWebKey): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(publicKey)));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 12).toUpperCase();
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function decodeBase64(value: string): ArrayBuffer {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
+}
+
+async function waitForBuffer(channel: RTCDataChannel): Promise<void> {
+  while (channel.bufferedAmount > 1024 * 1024) {
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+  }
 }
