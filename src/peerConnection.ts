@@ -41,6 +41,7 @@ export class PeerConnection {
   private remoteSignature: string | null = null;
   private localSignature: string | null = null;
   private registered = false;
+  private localFingerprint = '';
 
   constructor(
     private readonly roomId: string,
@@ -73,6 +74,7 @@ export class PeerConnection {
     this.connection.ondatachannel = (event) => this.attachDataChannel(event.channel);
 
     try {
+      await this.initializeIdentity();
       this.socket = new WebSocket(trackerUrl());
       await new Promise<void>((resolve, reject) => {
         if (!this.socket) return reject(new Error('No se pudo crear el tracker.'));
@@ -111,6 +113,7 @@ export class PeerConnection {
     this.remoteSignature = null;
     this.localSignature = null;
     this.registered = false;
+    this.localFingerprint = '';
   }
 
   sendCatalogEntry(entry: CatalogEntry): void {
@@ -135,6 +138,7 @@ export class PeerConnection {
     }
     if (message.type === 'ready') {
       this.registered = true;
+      this.onLocalIdentity?.(this.localFingerprint);
       this.onStateChange('waiting');
       return;
     }
@@ -202,6 +206,13 @@ export class PeerConnection {
   }
 
   private async startAuthentication(channel: RTCDataChannel): Promise<void> {
+    if (!this.identity || !this.localIdentity) {
+      throw new Error('La identidad del dispositivo no está disponible.');
+    }
+    channel.send(JSON.stringify({ type: 'auth-hello', ...this.localIdentity } satisfies AuthMessage));
+  }
+
+  private async initializeIdentity(): Promise<void> {
     this.identity = await crypto.subtle.generateKey(
       { name: 'ECDSA', namedCurve: 'P-256' },
       false,
@@ -209,8 +220,7 @@ export class PeerConnection {
     );
     const publicKey = await crypto.subtle.exportKey('jwk', this.identity.publicKey);
     this.localIdentity = { publicKey, nonce: randomNonce() };
-    this.onLocalIdentity?.(await fingerprint(publicKey));
-    channel.send(JSON.stringify({ type: 'auth-hello', ...this.localIdentity } satisfies AuthMessage));
+    this.localFingerprint = await fingerprint(publicKey);
   }
 
   private async handleAuthentication(message: AuthMessage): Promise<void> {
