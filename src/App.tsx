@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
 import { ConnectionState, PeerConnection } from './peerConnection';
-import { CatalogEntry, clearCatalog, getLocalFile, listCatalog, markRemoteUnavailable, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
+import { CatalogEntry, clearCatalog, deleteCatalogEntry, getLocalFile, listCatalog, markRemoteUnavailable, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 const INVITATION_ROLE_KEY = 'transferencia-p2p-invitation-role';
@@ -207,6 +207,17 @@ export function App() {
     }
   };
 
+  const removeFile = async (entry: CatalogEntry) => {
+    try {
+      await deleteCatalogEntry(entry.id);
+      setCatalog(await listCatalog());
+      setNotice(`"${entry.name}" se eliminó del catálogo.`);
+      window.setTimeout(() => setNotice(''), 3000);
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'No se pudo eliminar el archivo.');
+    }
+  };
+
   const requestFile = (entry: CatalogEntry) => {
     if (!peerRef.current || connectionState !== 'connected') return;
     try {
@@ -233,15 +244,18 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div className="brand-mark" aria-hidden="true">↗</div>
-        <div>
+        <button className="header-qr" type="button" onClick={() => setCatalogOpen(true)} aria-label="Mostrar código QR de esta sala">
+          <QrCode value={invitation} />
+        </button>
+        <div className="header-title">
           <p className="eyebrow">Transferencia directa</p>
           <h1>Transferencia P2P</h1>
         </div>
-        <button className="new-room-button" type="button" onClick={createNewRoom}>Nueva sala</button>
+        <button className="new-room-button" type="button" onClick={createNewRoom} disabled={catalog.length === 0}>Nueva sala</button>
+        <button className="access-room-button" type="button" onClick={startCamera}>Acceder a sala</button>
       </header>
 
-      {!catalogOpen && <section className="pairing-grid initial-pairing" aria-label="Identificador de sesión">
+      {roomEntryOpen && <section className="pairing-grid initial-pairing" aria-label="Acceder a otra sala">
         <article className="pairing-card own-card">
           <div className="card-heading">
             <span className="step-badge">01</span>
@@ -250,22 +264,19 @@ export function App() {
               <h3>Mi QR</h3>
             </div>
           </div>
-          <button className="qr-trigger" type="button" onClick={() => connectionState === 'connected' && setCatalogOpen(true)} disabled={connectionState !== 'connected'}>
-            <div className="qr-area"><QrCode value={invitation} /></div>
-          </button>
-          <p className="card-description">Escanea esta huella desde el otro dispositivo</p>
-          <p className="device-fingerprint">Huella: {localFingerprint || 'Pendiente de autenticación'}</p>
-          <button className="primary-button" type="button" onClick={startCamera}>Entrar a una sala <span>→</span></button>
+          <div className="qr-area"><QrCode value={invitation} /></div>
+          <p className="card-description">Esta es tu sala actual</p>
+          <p className="device-fingerprint">Huella: {localFingerprint || 'Registrando sesión'}</p>
           <button className="text-button" type="button" onClick={copyInvitation}>Copiar huella de sesión</button>
         </article>
 
-        {roomEntryOpen && connectionState !== 'connected' && <div className="connector" aria-hidden="true">
+        {roomEntryOpen && <div className="connector" aria-hidden="true">
           <span />
           <strong>o</strong>
           <span />
         </div>}
 
-        {roomEntryOpen && connectionState !== 'connected' && <article className="pairing-card scan-card">
+        {roomEntryOpen && <article className="pairing-card scan-card">
           <div className="card-heading">
             <span className="step-badge">02</span>
             <div>
@@ -302,8 +313,7 @@ export function App() {
           )}
           <button className="text-button" type="button" onClick={pasteInvitation}>Pegar huella</button>
         </article>}
-      </section>
-      }
+      </section>}
 
       <p className={`notice${notice ? ' notice-visible' : ''}`} role="status">{notice}</p>
       <section className={`connection-status connection-${connectionState}`} aria-live="polite">
@@ -319,24 +329,19 @@ export function App() {
         </span>
         {peerFingerprint && <small className="peer-fingerprint">Huella: {peerFingerprint}</small>}
       </section>
-      {(connectionState === 'connected' || connectionState === 'swarm') && catalogOpen && <section className="catalog-panel" aria-labelledby="catalog-title">
+      <section className="catalog-panel" aria-labelledby="catalog-title">
         <div className="catalog-heading">
-          <button className="catalog-qr" type="button" onClick={() => setCatalogOpen(false)} aria-label="Volver al QR">
-            <QrCode value={invitation} />
-          </button>
           <div>
-            <p className="eyebrow">Después de autenticar</p>
+            <p className="eyebrow">Sala actual</p>
             <h2 id="catalog-title">Catálogo de archivos</h2>
           </div>
-          <label className={`file-button${connectionState === 'connected' || connectionState === 'swarm' ? '' : ' file-button-disabled'}`}>
+          <label className="file-button">
             Añadir archivo
-            <input type="file" onChange={addFile} disabled={connectionState !== 'connected' && connectionState !== 'swarm'} />
+            <input type="file" onChange={addFile} />
           </label>
         </div>
         <p className="catalog-description">
-          {connectionState === 'swarm'
-            ? 'Esta sesión ya pertenece al swarm; sus archivos se compartirán al conectar otros dispositivos.'
-            : 'Los nuevos archivos aparecen automáticamente en el swarm.'}
+          Los archivos se guardan en este dispositivo y se anuncian al conectar otra sesión.
         </p>
         {catalogError && <p className="catalog-error" role="alert">{catalogError}</p>}
         {catalog.length === 0 ? (
@@ -354,6 +359,7 @@ export function App() {
                   {entry.available ? 'Disponible' : 'Pendiente'}
                   {entry.sharedWith && <small> · {entry.sharedWith}</small>}
                 </span>
+                <button className="remove-button" type="button" onClick={() => removeFile(entry)}>Eliminar</button>
                 {entry.owner === 'remote' && !entry.available && (
                   <button
                     className="transfer-button"
@@ -370,7 +376,7 @@ export function App() {
             ))}
           </ul>
         )}
-      </section>}
+      </section>
       <footer className="privacy-note">
         <span aria-hidden="true">◈</span>
         <p>Los archivos viajan directamente entre tus dispositivos.<br />No se almacenan en ningún servidor.</p>

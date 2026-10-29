@@ -4,10 +4,24 @@
   padding: 34px 0 42px;
 }
 
-.app-header { display: flex; align-items: center; gap: 12px; }
+.app-header {
+  display: flex; align-items: center; gap: 14px; min-height: 92px; margin: -34px 0 0;
+  padding: 14px 18px; border-bottom: 6px solid #17212b; background: #fff;
+}
+.header-qr {
+  display: grid; place-items: center; flex: 0 0 auto; width: 64px; height: 64px;
+  padding: 3px; border: 1px solid #dfe5eb; border-radius: 8px; background: #fff; cursor: pointer;
+}
+.header-qr .qr-code { width: 56px; height: 56px; }
+.header-title { flex: 1; }
 .new-room-button {
-  margin-left: auto; padding: 9px 13px; border: 1px solid #dfe5eb; border-radius: 8px;
+  padding: 9px 13px; border: 1px solid #dfe5eb; border-radius: 8px;
   color: #344452; background: #fff; cursor: pointer; font-size: 12px;
+}
+.new-room-button:disabled { cursor: not-allowed; opacity: .45; }
+.access-room-button {
+  padding: 10px 14px; border: 0; border-radius: 8px; color: #fff;
+  background: #ef6a50; cursor: pointer; font-size: 12px;
 }
 .brand-mark {
   display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
@@ -130,9 +144,17 @@
   background: #fff; cursor: pointer; font-size: 11px;
 }
 .transfer-button:disabled { cursor: wait; opacity: .65; }
+.remove-button {
+  padding: 7px 10px; border: 1px solid #dfe5eb; border-radius: 7px;
+  color: #788793; background: #fff; cursor: pointer; font-size: 11px;
+}
 
 @media (max-width: 700px) {
   .app-shell { width: min(100% - 30px, 480px); padding-top: 22px; }
+  .app-header { margin-top: -22px; padding-inline: 8px; }
+  .header-title h1 { display: none; }
+  .new-room-button { padding-inline: 9px; }
+  .access-room-button { padding-inline: 9px; }
   .hero { margin: 55px auto 30px; }.hero h2 { font-size: 48px; }
   .pairing-grid { grid-template-columns: 1fr; gap: 18px; }
   .pairing-card { min-height: auto; padding: 22px; }.connector { flex-direction: row; }

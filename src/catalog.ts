@@ -62,6 +62,16 @@ export async function saveLocalFile(file: File): Promise<CatalogEntry> {
   return entry;
 }
 
+export async function deleteCatalogEntry(id: string): Promise<void> {
+  const database = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const request = database.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(id);
+    request.onerror = () => reject(request.error ?? new Error('No se pudo eliminar el archivo del catálogo.'));
+    request.onsuccess = () => resolve();
+  });
+  database.close();
+}
+
 export async function saveRemoteEntry(entry: CatalogEntry): Promise<void> {
   await saveEntry({ ...entry, owner: 'remote', available: false });
 }

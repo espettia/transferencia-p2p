@@ -1,6 +1,6 @@
 # Transferencia P2P
 
-Aplicación web estática para emparejar dos dispositivos y transferir archivos directamente entre ellos.
+Aplicación web estática para organizar una sala y transferir archivos directamente entre dispositivos.
 
 ## Desarrollo
 
@@ -31,9 +31,10 @@ La autenticación de pares se realiza después de abrir WebRTC: ambos dispositiv
 una identidad ECDSA P-256 temporal, intercambian sus claves públicas y firman un desafío
 común ligado a la invitación. La interfaz muestra la huella corta de la clave remota.
 
-IndexedDB conserva el catálogo local y los archivos seleccionados. Tras autenticarse,
-cada nuevo archivo comparte sus metadatos por WebRTC y aparece automáticamente en el
-catálogo remoto.
+Al abrir la aplicación se crea o recupera inmediatamente una sala y se muestra su catálogo
+local; la cámara solo se activa al pulsar **Acceder a sala**. IndexedDB conserva el catálogo
+local y los archivos seleccionados. Cuando otra sesión se autentica, se transmiten únicamente
+los metadatos del catálogo, nunca los archivos automáticamente.
 El contenido se transfiere bajo demanda: al seleccionar “Transferir”, el dispositivo
 remoto solicita el archivo y el emisor lo envía por el canal WebRTC en bloques de 16 KB.
 Al completar la recepción, el blob se guarda en IndexedDB y el elemento queda disponible.
@@ -62,8 +63,10 @@ escanea esa huella y el tracker la usa para encontrar la sala. Cualquiera que ob
 la huella puede solicitar acceso a esa sesión.
 
 La última sala se conserva en el almacenamiento persistente del navegador y se intenta
-reconectar automáticamente si se pierde la conexión. **Nueva sala** borra esa huella,
-el rol guardado y todo el catálogo de IndexedDB antes de iniciar una sesión nueva.
+reconectar automáticamente al iniciar. Los archivos remotos permanecen en el catálogo como
+no disponibles si la sesión que los compartió ya no está conectada. **Nueva sala** se habilita
+cuando el catálogo no está vacío y borra la sala actual y todo el catálogo de IndexedDB antes
+de iniciar una sesión nueva.
 
 El despliegue incluye un tracker en `/tracker`. Cada sesión se registra primero en la
 sala con `create` o `join`; el tracker responde `ready` antes de permitir la señalización.
