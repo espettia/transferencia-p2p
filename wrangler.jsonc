@@ -2,7 +2,22 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "transferencia-p2p",
   "compatibility_date": "2026-10-29",
+  "main": "./src/worker.ts",
   "assets": {
     "directory": "./dist"
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS",
+        "class_name": "Room"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"]
+    }
+  ]
 }

@@ -23,7 +23,7 @@ Se implementará una etapa a la vez:
 4. **Implementar autenticación de pares** — Completada; depende de la etapa 3.
 5. **Implementar IndexedDB y catálogo** — Pendiente; depende de la etapa 4.
 6. **Implementar transferencias por bloques** — Pendiente; depende de la etapa 5.
-7. **Validar, desplegar y documentar** — Pendiente; depende de la etapa 6.
+7. **Validar, desplegar y documentar** — En progreso; depende de la etapa 6.
 
 La siguiente etapa es **Implementar IndexedDB y catálogo**.
 
@@ -41,6 +41,10 @@ El cliente espera un tracker compatible con estos mensajes JSON:
 - Error: `{ "type": "error", "message": "..." }`
 
 Configura la URL con `VITE_TRACKER_URL` (por ejemplo, `wss://tracker.example.com`). Si no se configura, se usa `ws(s)://<host>/tracker`.
+
+El despliegue incluye un tracker en `/tracker`. Cada dispositivo se registra primero
+en la sala con `create` o `join`; el tracker responde `ready` antes de permitir la
+señalización. Las salas admiten dos dispositivos y se eliminan al cerrar sus conexiones.
 
 ## Producción
 

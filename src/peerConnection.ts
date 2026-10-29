@@ -38,6 +38,7 @@ export class PeerConnection {
   private remoteIdentity: PeerIdentity | null = null;
   private remoteSignature: string | null = null;
   private localSignature: string | null = null;
+  private registered = false;
 
   constructor(
     private readonly roomId: string,
@@ -105,10 +106,12 @@ export class PeerConnection {
     this.remoteIdentity = null;
     this.remoteSignature = null;
     this.localSignature = null;
+    this.registered = false;
   }
 
   private send(message: TrackerMessage): void {
-    if (this.socket?.readyState === WebSocket.OPEN) {
+    const registration = message.type === 'create' || message.type === 'join';
+    if (this.socket?.readyState === WebSocket.OPEN && (registration || this.registered)) {
       this.socket.send(JSON.stringify(message));
     }
   }
@@ -120,6 +123,7 @@ export class PeerConnection {
       return;
     }
     if (message.type === 'ready') {
+      this.registered = true;
       this.onStateChange('waiting');
       return;
     }
