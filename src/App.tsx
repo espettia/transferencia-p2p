@@ -3,10 +3,12 @@ import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
 import './App.css';
 import { ConnectionState, PeerConnection } from './peerConnection';
-import { CatalogEntry, getLocalFile, listCatalog, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
+import { CatalogEntry, clearCatalog, getLocalFile, listCatalog, saveLocalFile, saveReceivedFile, saveRemoteEntry } from './catalog';
 
 const INVITATION_KEY = 'transferencia-p2p-invitation';
 const INVITATION_ROLE_KEY = 'transferencia-p2p-invitation-role';
+const ROOM_CACHE_KEY = 'transferencia-p2p-last-room';
+const ROOM_ROLE_CACHE_KEY = 'transferencia-p2p-last-room-role';
 
 function createInvitation() {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -33,7 +35,8 @@ function QrCode({ value }: { value: string }) {
 
 export function App() {
   const [invitation, setInvitation] = useState(() => {
-    const saved = window.sessionStorage.getItem(INVITATION_KEY);
+    const saved = window.localStorage.getItem(ROOM_CACHE_KEY)
+      ?? window.sessionStorage.getItem(INVITATION_KEY);
     return saved && /^[0-9A-F]{36}$/i.test(saved) ? saved : createInvitation();
   });
   const [notice, setNotice] = useState('');
@@ -48,6 +51,7 @@ export function App() {
   const [transferProgress, setTransferProgress] = useState<Record<string, number>>({});
   const [roomEntryOpen, setRoomEntryOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scannerRef = useRef<QrScanner | null>(null);
   const peerRef = useRef<PeerConnection | null>(null);
@@ -58,15 +62,22 @@ export function App() {
 
   useEffect(() => {
     window.sessionStorage.setItem(INVITATION_KEY, invitation);
+    window.localStorage.setItem(ROOM_CACHE_KEY, invitation);
   }, [invitation]);
 
   useEffect(() => {
     const roomId = invitation;
-    const isGuest = window.sessionStorage.getItem(INVITATION_ROLE_KEY) === 'guest';
+    const isGuest = (window.localStorage.getItem(ROOM_ROLE_CACHE_KEY)
+      ?? window.sessionStorage.getItem(INVITATION_ROLE_KEY)) === 'guest';
+    let disposed = false;
+    let retryTimer: number | undefined;
     const peer = new PeerConnection(roomId, !isGuest, (state, detail) => {
       setConnectionState(state);
       setConnectionDetail(detail ?? '');
       if (state === 'connected') setCatalogOpen(true);
+      if (state === 'error' && !disposed) {
+        retryTimer = window.setTimeout(() => setReconnectAttempt((attempt) => attempt + 1), 2500);
+      }
     }, setPeerFingerprint, setLocalFingerprint, (entry) => {
       void saveRemoteEntry(entry).then(async () => setCatalog(await listCatalog()))
         .catch(() => setCatalogError('No se pudo actualizar el catálogo remoto.'));
@@ -82,10 +93,12 @@ export function App() {
     peerRef.current = peer;
     void peer.connect();
     return () => {
+      disposed = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       peer.close();
       peerRef.current = null;
     };
-  }, [invitation]);
+  }, [invitation, reconnectAttempt]);
 
   useEffect(() => {
     if (connectionState !== 'connected' || !peerRef.current) return;
@@ -113,6 +126,8 @@ export function App() {
         }
         window.sessionStorage.setItem(INVITATION_KEY, token.toUpperCase());
         window.sessionStorage.setItem(INVITATION_ROLE_KEY, 'guest');
+        window.localStorage.setItem(ROOM_CACHE_KEY, token.toUpperCase());
+        window.localStorage.setItem(ROOM_ROLE_CACHE_KEY, 'guest');
         window.location.reload();
       },
       { returnDetailedScanResult: true },
@@ -160,6 +175,8 @@ export function App() {
       if (!/^[0-9A-F]{36}$/i.test(token)) throw new Error('invalid fingerprint');
       window.sessionStorage.setItem(INVITATION_KEY, token.toUpperCase());
       window.sessionStorage.setItem(INVITATION_ROLE_KEY, 'guest');
+      window.localStorage.setItem(ROOM_CACHE_KEY, token.toUpperCase());
+      window.localStorage.setItem(ROOM_ROLE_CACHE_KEY, 'guest');
       window.location.reload();
     } catch {
       setNotice('La huella no es válida');
@@ -197,6 +214,19 @@ export function App() {
     }
   };
 
+  const createNewRoom = async () => {
+    try {
+      await clearCatalog();
+      window.localStorage.removeItem(ROOM_CACHE_KEY);
+      window.localStorage.removeItem(ROOM_ROLE_CACHE_KEY);
+      window.sessionStorage.removeItem(INVITATION_KEY);
+      window.sessionStorage.removeItem(INVITATION_ROLE_KEY);
+      window.location.reload();
+    } catch (error) {
+      setCatalogError(error instanceof Error ? error.message : 'No se pudo crear una sala nueva.');
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -205,6 +235,7 @@ export function App() {
           <p className="eyebrow">Transferencia directa</p>
           <h1>Transferencia P2P</h1>
         </div>
+        <button className="new-room-button" type="button" onClick={createNewRoom}>Nueva sala</button>
       </header>
 
       {!catalogOpen && <section className="pairing-grid initial-pairing" aria-label="Identificador de sesión">

@@ -14,6 +14,15 @@ type StoredEntry = CatalogEntry & { blob?: Blob };
 const DATABASE_NAME = 'transferencia-p2p';
 const STORE_NAME = 'catalog';
 
+export async function clearCatalog(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(DATABASE_NAME);
+    request.onerror = () => reject(request.error ?? new Error('No se pudo borrar el catálogo.'));
+    request.onsuccess = () => resolve();
+    request.onblocked = () => reject(new Error('Cierra otras pestañas de Transferencia P2P antes de crear una sala nueva.'));
+  });
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, 1);
